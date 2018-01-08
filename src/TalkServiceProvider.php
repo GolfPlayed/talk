@@ -7,6 +7,7 @@ use Illuminate\Foundation\Application as LaravelApplication;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Lumen\Application as LumenApplication;
 use Nahid\Talk\Conversations\ConversationRepository;
+use Nahid\Talk\Conversations\ConversationParticipantRepository;
 use Nahid\Talk\Messages\MessageRepository;
 
 class TalkServiceProvider extends ServiceProvider
@@ -57,7 +58,7 @@ class TalkServiceProvider extends ServiceProvider
     protected function registerTalk()
     {
         $this->app->singleton('talk', function (Container $app) {
-            return new Talk($app['config'], $app['talk.broadcast'], $app[ConversationRepository::class], $app[MessageRepository::class]);
+            return new Talk($app['config'], $app['talk.broadcast'], $app[ConversationRepository::class], $app[ConversationParticipantRepository::class], $app[MessageRepository::class]);
         });
 
         $this->app->alias('talk', Talk::class);

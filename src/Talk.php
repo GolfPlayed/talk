@@ -13,6 +13,7 @@ namespace Nahid\Talk;
 
 use Illuminate\Contracts\Config\Repository;
 use Nahid\Talk\Conversations\ConversationRepository;
+use Nahid\Talk\Conversations\ConversationParticipantRepository;
 use Nahid\Talk\Messages\MessageRepository;
 use Nahid\Talk\Live\Broadcast;
 
@@ -31,6 +32,13 @@ class Talk
      * @var \Nahid\Talk\Conversations\ConversationRepository
      */
     protected $conversation;
+
+    /**
+     * The ConversationParticipantRepository class instance.
+     *
+     * @var \Nahid\Talk\Conversations\ConversationParticipantRepository
+     */
+    protected $participants;
 
     /**
      * The MessageRepository class instance.
@@ -56,13 +64,15 @@ class Talk
     /**
      * Initialize and instantiate conversation and message repositories.
      *
-     * @param \Nahid\Talk\Conversations\ConversationRepository $conversation
-     * @param \Nahid\Talk\Messages\MessageRepository           $message
+     * @param \Nahid\Talk\Conversations\ConversationRepository              $conversation
+     * @param \Nahid\Talk\Conversations\ConversationParticipantRepository   $participants
+     * @param \Nahid\Talk\Messages\MessageRepository                        $message
      */
-    public function __construct(Repository $config, Broadcast $broadcast, ConversationRepository $conversation, MessageRepository $message)
+    public function __construct(Repository $config, Broadcast $broadcast, ConversationRepository $conversation, ConversationParticipantRepository $participants, MessageRepository $message)
     {
         $this->config = $config;
         $this->conversation = $conversation;
+        $this->participants = $participants;
         $this->message = $message;
         $this->broadcast = $broadcast;
     }
@@ -121,15 +131,9 @@ class Talk
         }
 
         $collection = (object) null;
-        if ($conversations->user_one == $this->authUserId || $conversations->user_two == $this->authUserId) {
-            $withUser = ($conversations->userone->id === $this->authUserId) ? $conversations->usertwo : $conversations->userone;
-            $collection->withUser = $withUser;
-            $collection->messages = $conversations->messages;
+        $collection->messages = $conversations;
+        return $collection;
 
-            return $collection;
-        }
-
-        return false;
     }
 
     /**
@@ -139,24 +143,64 @@ class Talk
      *
      * @return int
      */
-    protected function newConversation($receiverId)
+    public function newConversation($receiverId)
     {
         $conversationId = $this->isConversationExists($receiverId);
         $user = $this->getSerializeUser($this->authUserId, $receiverId);
 
         if ($conversationId === false) {
             $conversation = $this->conversation->create([
-                'user_one' => $user['one'],
-                'user_two' => $user['two'],
+                'user_id' => $this->authUserId,
+                'name' => null,
+                'image' => null,
+                'group' => 0,
                 'status' => 1,
             ]);
 
             if ($conversation) {
+                $this->participants->create([
+                    'conversation_id' => $conversation->id,
+                    'user_id' => $receiverId,
+                    'active' => 1,
+                ]);
                 return $conversation->id;
             }
         }
 
         return $conversationId;
+    }
+
+    /**
+     * Create a new conversation with the given receiver ids, name and image
+     *
+     * @param array $receiverIds
+     * @param string $notification_message
+     * @param string $image
+     *
+     * @return int
+     */
+    public function newGroupConversation($receiverIds, $name = null, $image = null)
+    {
+        $conversation = $this->conversation->create([
+            'user_id' => $this->authUserId,
+            'name' => $name,
+            'image' => $image,
+            'group' => 1,
+            'status' => 1,
+        ]);
+
+        if ($conversation) {
+            foreach($receiverIds as $receiver){
+                $this->participants->create([
+                    'conversation_id' => $conversation->id,
+                    'user_id' => $receiver,
+                    'active' => 1,
+                ]);
+            }
+            return $conversation->id;
+        }
+
+        return false;
     }
 
     /**

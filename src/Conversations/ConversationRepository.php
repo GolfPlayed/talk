@@ -3,6 +3,8 @@
 namespace Nahid\Talk\Conversations;
 
 use SebastianBerc\Repositories\Repository;
+use Nahid\Talk\Messages\Message;
+use App\User;
 
 class ConversationRepository extends Repository
 {
@@ -17,7 +19,7 @@ class ConversationRepository extends Repository
     }
 
     /*
-     * check this given user is exists
+     * check this given conversation exists
      *
      * @param   int $id
      * @return  bool
@@ -33,7 +35,7 @@ class ConversationRepository extends Repository
     }
 
     /*
-     * check this given two users is already make a conversation
+     * check this given two users are already in a conversation
      *
      * @param   int $user1
      * @param   int $user2
@@ -41,10 +43,11 @@ class ConversationRepository extends Repository
      * */
     public function isExistsAmongTwoUsers($user1, $user2)
     {
-        $conversation = Conversation::where('user_one', $user1)
-            ->where('user_two', $user2);
+        $conversation = Conversation::where('user_id', $user1)
+        ->orWhere('user_id', $user2);
 
-        if ($conversation->exists()) {
+        if($conversation->exists()){
+            // TODO: Add lookup for participants
             return $conversation->first()->id;
         }
 
@@ -85,16 +88,15 @@ class ConversationRepository extends Repository
         $msgThread = $conv->with(['messages' => function ($q) use ($user) {
             return $q->where(function ($q) use ($user) {
                 $q->where('user_id', $user)
-                        ->where('deleted_from_sender', 0);
+                ->where('deleted_from_sender', 0);
             })
-                ->orWhere(function ($q) use ($user) {
-                    $q->where('user_id', '!=', $user);
-                    $q->where('deleted_from_receiver', 0);
-                })
+            ->orWhere(function ($q) use ($user) {
+                $q->where('user_id', '!=', $user);
+                $q->where('deleted_from_receiver', 0);
+            })
             ->latest();
-        }, 'userone', 'usertwo'])
-            ->where('user_one', $user)
-            ->orWhere('user_two', $user)
+        }, 'creator'])
+            ->where('user_id', $user)
             ->offset($offset)
             ->take($take)
             ->orderBy('updated_at', $order)
@@ -104,7 +106,7 @@ class ConversationRepository extends Repository
 
         foreach ($msgThread as $thread) {
             $collection = (object) null;
-            $conversationWith = ($thread->userone->id == $user) ? $thread->usertwo : $thread->userone;
+            $conversationWith = $thread->creator;
             $collection->thread = $thread->messages->first();
             $collection->withUser = $conversationWith;
             $threads[] = $collection;
@@ -151,19 +153,46 @@ class ConversationRepository extends Repository
      * */
     public function getMessagesById($conversationId, $userId, $offset, $take)
     {
-        return Conversation::with(['messages' => function ($query) use ($userId, $offset, $take) {
-            $query->where(function ($qr) use ($userId) {
-                $qr->where('user_id', '=', $userId)
-                    ->where('deleted_from_sender', 0);
-            })
-            ->orWhere(function ($q) use ($userId) {
-                $q->where('user_id', '!=', $userId)
-                    ->where('deleted_from_receiver', 0);
-            });
 
-            $query->offset($offset)->take($take);
+        $conversation = Conversation::where('id', $conversationId)->first();
+        if(!is_null($conversation)){
+            if($conversation->group){
 
-        }])->with(['userone', 'usertwo'])->find($conversationId);
+                $participants = ConversationParticipant::where('conversation_id', $conversationId)->get()->pluck('user_id');
+                $withUsers = User::whereIn('id', $participants)->get(['id', 'name']);
+                foreach($withUsers as $wu){
+                    $wu->profile = $wu->profile();
+                }
+
+                if(!empty($withUsers)){
+                    return [
+                        'messages' => Message::where('deleted_from_sender', 0)
+                        ->where('deleted_from_receiver', 0)
+                        ->where('conversation_id', $conversationId)
+                        ->offset($offset)->take($take)
+                        ->get(),
+                        'withUser' => $withUsers,
+                    ];
+                }
+
+            }else{
+                $participant = ConversationParticipant::where('conversation_id', $conversationId)->first();
+                $withUser = User::where('id', $participant->user_id)->first(['id', 'name']);
+                $withUser->profile = $withUser->profile();
+                if(!is_null($withUser)){
+                    return [
+                        'messages' => Message::where('deleted_from_sender', 0)
+                        ->where('deleted_from_receiver', 0)
+                        ->where('conversation_id', $conversationId)
+                        ->offset($offset)->take($take)
+                        ->get(),
+                        'withUser' => $withUser,
+                    ];
+                }
+            }
+        }
+
+
 
     }
 
@@ -178,8 +207,7 @@ class ConversationRepository extends Repository
     public function getMessagesAllById($conversationId, $offset, $take)
     {
         return $this->with(['messages' => function ($q) use ($offset, $take) {
-            return $q->offset($offset)
-                ->take($take);
+            return $q->offset($offset)->take($take);
         }, 'userone', 'usertwo'])->find($conversationId);
     }
 }

@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Migrations\Migration;
 Use Illuminate\Database\Schema\Blueprint;
 
-class CreateConversationsTable extends Migration
+class CreateConversationParticipantsTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,14 +13,11 @@ class CreateConversationsTable extends Migration
      */
     public function up()
     {
-        Schema::create('conversations', function (Blueprint $table) {
+        Schema::create('conversation_participants', function (Blueprint $table) {
             $table->increments('id');
+            $table->integer('conversation_id');
             $table->integer('user_id');
-            $table->string('name')->nullable();
-            $table->string('image')->nullable();
-            $table->boolean('group');
-            $table->boolean('private');
-            $table->boolean('status');
+            $table->boolean('active');
             $table->timestamps();
         });
     }
