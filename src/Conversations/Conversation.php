@@ -17,6 +17,11 @@ class Conversation extends Model
         'status',
     ];
 
+    public function participants()
+    {
+        return $this->hasMany('Nahid\Talk\Conversations\ConversationParticipant', 'conversation_id', 'id');
+    }
+
     /*
      * make a relation between message
      *
@@ -34,6 +39,6 @@ class Conversation extends Model
      * */
     public function creator()
     {
-        return $this->belongsTo('Nahid\Talk\Conversations\ConversationParticipant',  'user_id');
+        return $this->belongsTo(config('talk.user.model'), 'user_id', 'id');
     }
 }

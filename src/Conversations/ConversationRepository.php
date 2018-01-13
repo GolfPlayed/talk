@@ -85,6 +85,7 @@ class ConversationRepository extends Repository
     {
         $conv = new Conversation();
         $conv->authUser = $user;
+
         $msgThread = $conv->with(['messages' => function ($q) use ($user) {
             return $q->where(function ($q) use ($user) {
                 $q->where('user_id', $user)
@@ -95,20 +96,29 @@ class ConversationRepository extends Repository
                 $q->where('deleted_from_receiver', 0);
             })
             ->latest();
-        }, 'creator'])
-            ->where('user_id', $user)
-            ->offset($offset)
-            ->take($take)
-            ->orderBy('updated_at', $order)
-            ->get();
+        }, 'creator', 'participants' => function($q) {
+            return $q->where('active', 1);
+        }])
+        ->where('user_id', $user)
+        ->where('status', 1);
+        ->offset($offset)
+        ->take($take)
+        ->orderBy('updated_at', $order)
+        ->get();
 
         $threads = [];
-
         foreach ($msgThread as $thread) {
             $collection = (object) null;
-            $conversationWith = $thread->creator;
             $collection->thread = $thread->messages->first();
-            $collection->withUser = $conversationWith;
+            $collection->creator = $thread->creator;
+            $collection->group = (bool)$thread->group;
+            if($thread->group == 0){
+                $collection->name = $thread->name;
+                $collection->image = $thread->image;
+                $collection->participants = User::where('id', $thread->participants[0]->user_id)->first();
+            }else{
+                $collection->participants = $thread->participants->pluck('user_id');
+            }
             $threads[] = $collection;
         }
 
