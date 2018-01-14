@@ -47,7 +47,6 @@ class ConversationRepository extends Repository
         ->orWhere('user_id', $user2);
 
         if($conversation->exists()){
-            // TODO: Add lookup for participants
             return $conversation->first()->id;
         }
 
@@ -86,6 +85,9 @@ class ConversationRepository extends Repository
         $conv = new Conversation();
         $conv->authUser = $user;
 
+        $conversations_as_participant = ConversationParticipant::where('user_id', $user)->get()->pluck('conversation_id');
+        $conversations_as_participant_creators = Conversation::whereIn('id', $conversations_as_participant)->get()->pluck('user_id');
+
         $msgThread = $conv->with(['messages' => function ($q) use ($user) {
             return $q->where(function ($q) use ($user) {
                 $q->where('user_id', $user)
@@ -100,7 +102,8 @@ class ConversationRepository extends Repository
             return $q->where('active', 1);
         }])
         ->where('user_id', $user)
-        ->where('status', 1);
+        ->orWhereIn('id', $conversations_as_participant)
+        ->where('status', 1)
         ->offset($offset)
         ->take($take)
         ->orderBy('updated_at', $order)
@@ -109,14 +112,15 @@ class ConversationRepository extends Repository
         $threads = [];
         foreach ($msgThread as $thread) {
             $collection = (object) null;
+            $collection->conversation_id = $thread->id;
             $collection->thread = $thread->messages->first();
             $collection->creator = $thread->creator;
             $collection->group = (bool)$thread->group;
             if($thread->group == 0){
+                $collection->participants = User::with('profile')->where('id', $thread->participants[0]->user_id)->first();
+            }else{
                 $collection->name = $thread->name;
                 $collection->image = $thread->image;
-                $collection->participants = User::where('id', $thread->participants[0]->user_id)->first();
-            }else{
                 $collection->participants = $thread->participants->pluck('user_id');
             }
             $threads[] = $collection;
