@@ -5,6 +5,8 @@ namespace Nahid\Talk\Live;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Contracts\Config\Repository;
 use Nahid\Talk\Messages\Message;
+use Nahid\Talk\Conversations\ConversationRepository;
+use Nahid\Talk\Conversations\ConversationParticipantRepository;
 use Pusher\Pusher;
 
 class Broadcast
@@ -73,7 +75,7 @@ class Broadcast
      *
      * @param \Nahid\Talk\Messages\Message $message
      */
-    public function transmission(Message $message)
+    public function transmission(Message $message, Array $participants)
     {
         if (!$this->pusher) {
             return false;
@@ -82,7 +84,7 @@ class Broadcast
         $sender = $message->sender->toArray();
         $messageArray = $message->toArray();
         $messageArray['sender'] = $sender;
-        $this->dispatch(new Webcast($messageArray));
+        $this->dispatch(new Webcast($messageArray, $participants));
     }
 
     /**

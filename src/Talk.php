@@ -111,9 +111,12 @@ class Talk
             'is_seen' => 0,
         ]);
 
-        $message->conversation->touch();
+        $participants = [];
+        foreach($message->conversation->participants as $p){
+            array_push($participants, $p->user_id);
+        }
 
-        $this->broadcast->transmission($message);
+        $this->broadcast->transmission($message, $participants);
 
         return $message;
     }
@@ -145,8 +148,8 @@ class Talk
      */
     public function newConversation($receiverId)
     {
+
         $conversationId = $this->isConversationExists($receiverId);
-        $user = $this->getSerializeUser($this->authUserId, $receiverId);
 
         if ($conversationId === false) {
             $conversation = $this->conversation->create([
