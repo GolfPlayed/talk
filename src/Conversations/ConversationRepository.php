@@ -2,6 +2,9 @@
 
 namespace Nahid\Talk\Conversations;
 
+
+use App\Models\GolfPlayed\ConversationRemove;
+use App\Models\GolfPlayed\HomeCourse;
 use SebastianBerc\Repositories\Repository;
 use Nahid\Talk\Messages\Message;
 use App\User;
@@ -95,42 +98,52 @@ class ConversationRepository extends Repository
         $conv = new Conversation();
         $conv->authUser = $user;
 
-        $conversations_as_participant = ConversationParticipant::where('user_id', $user)->get()->pluck('conversation_id');
+        $removed_conversations = ConversationRemove::where('user_id', $user)
+            ->where('messages_removed',0)
+            ->get()
+            ->pluck('conversation_id')
+            ->toArray();
+        $conversations_as_participant = ConversationParticipant::where('user_id', $user)
+            ->whereNotIn('conversation_id', $removed_conversations)->get()->pluck('conversation_id');
         $conversations_as_participant_creators = Conversation::whereIn('id', $conversations_as_participant)->get()->pluck('user_id');
 
         $msgThread = $conv->with(['messages' => function ($q) use ($user) {
             return $q->where(function ($q) use ($user) {
                 $q->where('user_id', $user)
-                ->where('deleted_from_sender', 0);
+                    ->where('deleted_from_sender', 0);
             })
-            ->orWhere(function ($q) use ($user) {
-                $q->where('user_id', '!=', $user);
-                $q->where('deleted_from_receiver', 0);
-            })
-            ->latest();
+                ->orWhere(function ($q) use ($user) {
+                    $q->where('user_id', '!=', $user);
+                    $q->where('deleted_from_receiver', 0);
+                })
+                ->latest();
         }, 'creator', 'participants' => function($q) {
             return $q->where('active', 1);
         }])
-        ->where('user_id', $user)
-        ->orWhereIn('id', $conversations_as_participant)
-        ->where('status', 1)
-        ->offset($offset)
-        ->take($take)
-        ->orderBy('updated_at', $order)
-        ->get();
+            ->where(function($q) use($user, $removed_conversations){
+                $q->where('user_id', $user);
+                $q->whereNotIn('id', $removed_conversations);
+            })
+            ->orWhereIn('id', $conversations_as_participant)
+            ->where('status', 1)
+            ->offset($offset)
+            ->take($take)
+            ->orderBy('updated_at', $order)
+            ->get();
 
         $threads = [];
         foreach ($msgThread as $thread) {
-            $collection = (object) null;
+            $collection = (object)null;
             $collection->conversation_id = $thread->id;
             $collection->unread = $thread->messages->where('is_seen', 0)->count();
             $collection->thread = $thread->messages->first();
             $collection->creator = $thread->creator;
             $collection->group = (bool)$thread->group;
-            if($thread->group == 0){
+            if ($thread->group == 0) {
                 $collection->participants = User::with('profile')->where('id', $thread->participants[0]->user_id)->first();
-            }else{
-                $collection->name = $thread->name;
+            } else {
+                $collection->first_name = $thread->first_name;
+                $collection->last_name = $thread->last_name;
                 $collection->image = $thread->image;
                 $collection->participants = $thread->participants->pluck('user_id');
             }
@@ -176,48 +189,78 @@ class ConversationRepository extends Repository
      * @param   int $take
      * @return  collection
      * */
-    public function getMessagesById($conversationId, $userId, $offset, $take)
+    public function getMessagesById($conversation_id, $userId, $offset, $take)
     {
 
-        $conversation = Conversation::where('id', $conversationId)->first();
-        if(!is_null($conversation)){
-            if($conversation->group){
+        $removed_messages = ConversationRemove::where('user_id', $userId)
+            ->where('conversation_id', $conversation_id)
+            ->where('messages_removed', 1)
+            ->first();
 
-                $participants = ConversationParticipant::where('conversation_id', $conversationId)->get()->pluck('user_id');
-                $withUsers = User::whereIn('id', $participants)->get(['id', 'name']);
-                foreach($withUsers as $wu){
-                    $wu->profile = $wu->profile();
-                }
+        $messages = [];
+        $recipients = [];
+        if(!$removed_messages){
+            $messages = Message::where('conversation_id', $conversation_id)
+                ->select('*', 'user_id as user')
+                ->offset($offset)->take($take)
+                ->get()
+                ->toArray();
 
-                if(!empty($withUsers)){
-                    return [
-                        'messages' => Message::with('user.profile')->where('deleted_from_sender', 0)
-                        ->where('deleted_from_receiver', 0)
-                        ->where('conversation_id', $conversationId)
-                        ->offset($offset)->take($take)
-                        ->get(),
-                        'withUser' => $withUsers,
-                    ];
-                }
+            $messages = collect($messages)->map(function($item, $key){
+                $item = collect($item)->map(function($item, $key){
+                    if($key == 'user'){
+                        $user = User::with('profile')->where('id', '=', $item)->first(['id', 'first_name', 'last_name']);
+                        $user->home_course = null;
+                        $user->home_course_logo = null;
+                        $home_course = HomeCourse::with('course')->where('user_id', $user->id)->first();
+                        if(!is_null($home_course)){
+                            $user->home_course = $home_course->course->name;
+                            $user->home_course_logo = $home_course->course->logo;
+                        }
+                        return $user;
+                    }
+                    return $item;
+                });
+                return $item;
+            });
 
-            }else{
-                $participant = ConversationParticipant::where('conversation_id', $conversationId)->first();
-                $withUser = User::with('profile')->where('id', $participant->user_id)->first(['id', 'name']);
-                if(!is_null($withUser)){
+            $participants = ConversationParticipant::where('conversation_id', $conversation_id)->get()->pluck('user_id');
+            $recipients = User::with('profile')->whereIn('id', $participants)->get(['id', 'first_name', 'last_name']);
+//        $recipients = $conversations->messages['withUser'];
+//        $messages = $conversations->messages['messages'];
+        } else {
 
-                    return [
-                        'messages' => Message::with('user.profile')->where('deleted_from_sender', 0)
-                        ->where('deleted_from_receiver', 0)
-                        ->where('conversation_id', $conversationId)
-                        ->offset($offset)->take($take)
-                        ->get(),
-                        'withUser' => $withUser,
-                    ];
-                }
-            }
+            $messages = Message::where('conversation_id', $conversation_id)
+                ->where('id', '>', $removed_messages->last_message_id)
+                ->select('*', 'user_id as user')
+                ->offset($offset)->take($take)
+                ->get()
+                ->toArray();
+
+            $messages = collect($messages)->map(function($item, $key){
+                $item = collect($item)->map(function($item, $key){
+                    if($key == 'user'){
+                        $user = User::with('profile')->where('id', '=', $item)->first(['id', 'first_name', 'last_name']);
+                        $user->home_course = null;
+                        $user->home_course_logo = null;
+                        $home_course = HomeCourse::with('course')->where('user_id', $user->id)->first();
+                        if(!is_null($home_course)){
+                            $user->home_course = $home_course->course->name;
+                            $user->home_course_logo = $home_course->course->logo;
+                        }
+                        return $user;
+                    }
+                    return $item;
+                });
+                return $item;
+            });
+            $participants = ConversationParticipant::where('conversation_id', $conversation_id)->get()->pluck('user_id');
+            $recipients = User::with('profile')->whereIn('id', $participants)->get(['id', 'first_name', 'last_name']);
         }
-
-
+        return [
+            'messages' => $messages,
+            'withUser' => $recipients,
+        ];
 
     }
 
