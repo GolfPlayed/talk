@@ -2,7 +2,6 @@
 
 namespace Nahid\Talk\Conversations;
 
-
 use App\Models\GolfPlayed\ConversationRemove;
 use App\Models\GolfPlayed\HomeCourse;
 use SebastianBerc\Repositories\Repository;
@@ -103,8 +102,10 @@ class ConversationRepository extends Repository
             ->get()
             ->pluck('conversation_id')
             ->toArray();
+
         $conversations_as_participant = ConversationParticipant::where('user_id', $user)
             ->whereNotIn('conversation_id', $removed_conversations)->get()->pluck('conversation_id');
+
         $conversations_as_participant_creators = Conversation::whereIn('id', $conversations_as_participant)->get()->pluck('user_id');
 
         $msgThread = $conv->with(['messages' => function ($q) use ($user) {
