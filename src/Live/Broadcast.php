@@ -87,14 +87,14 @@ class Broadcast
         $this->dispatch(new Webcast($messageArray, $participants));
     }
 
-    public function transmissionConversation($conversation, $reciever)
+    public function transmissionConversation($conversation, $receiver)
     {
         if (!$this->pusher) {
             return false;
         }
         $conversation = $conversation->toArray();
 
-        $this->dispatch(new Webcastconv($conversation, $reciever));
+        $this->dispatch(new WebcastConv($conversation, $receiver));
     }
 
     /**

@@ -7,7 +7,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
-class Webcastconv implements ShouldQueue
+class WebcastConv implements ShouldQueue
 {
     use InteractsWithQueue, Queueable, SerializesModels;
 
@@ -64,6 +64,6 @@ class Webcastconv implements ShouldQueue
             $channelForInboxReceivers[] = $this->broadcast->getConfig('broadcast.app_name').'-inbox-'.$participant_user_id;
         }
 
-        $this->broadcast->pusher->trigger([$channelForConversation, implode(',', $channelForInboxReceivers)], 'talk-crerate-conversation', $this->conversation);
+        $this->broadcast->pusher->trigger([$channelForConversation, implode(',', $channelForInboxReceivers)], 'talk-create-conversation', $this->conversation);
     }
 }
