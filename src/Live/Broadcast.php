@@ -87,6 +87,16 @@ class Broadcast
         $this->dispatch(new Webcast($messageArray, $participants));
     }
 
+    public function transmissionConversation($conversation, $reciever)
+    {
+        if (!$this->pusher) {
+            return false;
+        }
+        $conversation = $conversation->toArray();
+
+        $this->dispatch(new Webcastconv($conversation, $reciever));
+    }
+
     /**
      * get specific config from talk configurations.
      *

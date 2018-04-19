@@ -11,6 +11,7 @@
 
 namespace Nahid\Talk;
 
+use Carbon\Carbon;
 use Illuminate\Contracts\Config\Repository;
 use Nahid\Talk\Conversations\ConversationRepository;
 use Nahid\Talk\Conversations\ConversationParticipantRepository;
@@ -110,6 +111,8 @@ class Talk
             'user_id' => $this->authUserId,
             'is_seen' => 0,
         ]);
+        $timestamp = Carbon::now()->format('Y-m-d H:i:s');
+        Conversation::where('id', $conversationId)->update(['updated_at' => $timestamp]);
 
         $participants = [];
         foreach($message->conversation->participants as $p){
@@ -168,6 +171,7 @@ class Talk
                 ]);
                 return $conversation->id;
             }
+            $this->broadcast->transmissionConversation($conversation, [$receiverId]);
         }
 
         return $conversationId;
@@ -200,6 +204,8 @@ class Talk
                     'active' => 1,
                 ]);
             }
+            $this->broadcast->transmissionConversation($conversation, $receiverIds);
+
             return $conversation->id;
         }
 

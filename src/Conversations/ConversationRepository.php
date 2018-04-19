@@ -118,9 +118,9 @@ class ConversationRepository extends Repository
                     $q->where('deleted_from_receiver', 0);
                 })
                 ->latest();
-        }, 'creator', 'participants' => function($q) {
+        }, 'creator', 'creator.profile', 'participants' => function($q) {
             return $q->where('active', 1);
-        }])
+        }, 'participants.users'])
             ->where(function($q) use($user, $removed_conversations){
                 $q->where('user_id', $user);
                 $q->whereNotIn('id', $removed_conversations);
@@ -140,13 +140,14 @@ class ConversationRepository extends Repository
             $collection->thread = $thread->messages->first();
             $collection->creator = $thread->creator;
             $collection->group = (bool)$thread->group;
+            $collection->name = $thread->name ?? null;
             if ($thread->group == 0) {
                 $collection->participants = User::with('profile')->where('id', $thread->participants[0]->user_id)->first();
             } else {
                 $collection->first_name = $thread->first_name;
                 $collection->last_name = $thread->last_name;
                 $collection->image = $thread->image;
-                $collection->participants = $thread->participants->pluck('user_id');
+                $collection->participants = $thread->participants; //->pluck('user_id');
             }
             $threads[] = $collection;
         }
