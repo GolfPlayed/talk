@@ -117,7 +117,7 @@ class ConversationRepository extends Repository
                     $q->where('deleted_from_receiver', 0);
                 })
                 ->latest();
-        }, 'creator', 'participants' => function($q) {
+        }, 'creator', 'creator.profile', 'participants' => function($q) {
             return $q->where('active', 1);
         }, 'participants.users'])
             ->where(function($q) use($user, $removed_conversations){
